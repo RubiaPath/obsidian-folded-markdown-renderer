@@ -26,9 +26,16 @@ This is why nested Markdown inside `<details>` cannot be rendered correctly with
 ## Installation
 
 ### Manual install
-1. Create `VaultFolder/.obsidian/plugins/obsidian-folded-markdown-renderer` if it does not exist.
-2. Copy `manifest.json`, `main.js`, and `styles.css` from a release into that folder.
-3. Reload Obsidian and enable **Obsidian Folded Markdown Renderer** under *Community Plugins*.
+
+1. Clone this repository into your vault’s plugin folder:
+
+   ```
+   <vault>/.obsidian/plugins/obsidian-folded-markdown-renderer
+   ```
+
+   *(Or place the `manifest.json`, `main.js`, and `styles.css` into the same directory.)*
+
+2. Reload Obsidian and enable **Obsidian Folded Markdown Renderer** under *Community Plugins*.
 
 ### Development install
 1. Clone this repository into `.obsidian/plugins/obsidian-folded-markdown-renderer` inside a vault.
@@ -40,9 +47,32 @@ This is why nested Markdown inside `<details>` cannot be rendered correctly with
 - **Render Markdown** — master toggle that tells the plugin whether to touch `<details>` blocks.
 - **Render `<summary>`** — optionally include `<summary>` content in the Markdown rendering pipeline (disabled by default to keep built-in styling).
 
+## Markdown formatting note for `<details>`
+
+Due to Obsidian’s HTML/Markdown boundary rules, **the line immediately following a `<details>` tag must contain Markdown content directly**.
+ If you insert an empty line between `<details>` and the first Markdown element, Obsidian will treat it as *outside* the fold and render the content above the toggle.
+
+**Correct:**
+
+```html
+<details>
+This line is inside.
+</details>
+```
+
+**Incorrect (renders outside the fold):**
+
+```html
+<details>
+
+This line will appear outside the fold.
+</details>
+```
+
+This is a limitation of the Markdown-it parser and applies regardless of whether the plugin is enabled.
+
 ## Plugin metadata
 - **Plugin name:** Obsidian Folded Markdown Renderer
 - **Plugin ID:** `obsidian-folded-markdown-renderer`
 - **Minimum Obsidian version:** 0.15.0
 
-Feel free to open issues or pull requests if you notice rendering edge cases inside `<details>` blocks.
