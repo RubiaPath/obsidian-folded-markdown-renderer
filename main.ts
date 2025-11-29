@@ -1,134 +1,129 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import {
+  Plugin,
+  MarkdownPostProcessorContext,
+  MarkdownRenderer,
+  PluginSettingTab,
+  App,
+  Setting,
+} from "obsidian";
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+/** Settings */
+interface DMRSettings {
+  enabled: boolean;          // Master toggle
+  renderSummary: boolean;    // Whether <summary> needs to be rendered as well
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: DMRSettings = {
+  enabled: true,
+  renderSummary: false,
+};
+
+export default class DetailsMarkdownRendererPlugin extends Plugin {
+  settings: DMRSettings;
+
+  async onload() {
+    await this.loadSettings();
+    this.addSettingTab(new DMRSettingTab(this.app, this));
+
+    // Key idea: collect every target node and render it once
+    this.registerMarkdownPostProcessor((rootEl: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+      if (!this.settings.enabled) return;
+
+      const detailsList = rootEl.querySelectorAll("details");
+      detailsList.forEach((detailsEl) => {
+        if (detailsEl.classList.contains("dmr-processed")) return;
+        detailsEl.classList.add("dmr-processed");
+
+        // 1) Grab <summary> (if present)
+        const summaries = detailsEl.getElementsByTagName("summary");
+        const summaryEl = summaries.length ? summaries[0] : null;
+
+        // 2) Collect nodes to render; skip <summary> unless explicitly allowed
+        const nodesToRender: ChildNode[] = [];
+        for (const node of Array.from(detailsEl.childNodes)) {
+          if (!this.settings.renderSummary && node === summaryEl) continue;
+          // Collect content after <summary> to avoid messing up the order
+          if (summaryEl && node === summaryEl) continue;
+          nodesToRender.push(node);
+        }
+
+        // Place <summary> at the top when it also needs rendering
+        if (this.settings.renderSummary && summaryEl) {
+          nodesToRender.unshift(summaryEl);
+        }
+
+        // 3) Merge the raw text of every node into a single markdown string
+        //    Keeping it as one string preserves tables/paragraph layout
+        const parts: string[] = [];
+        for (const n of nodesToRender) {
+          const t = n.textContent ?? "";
+          parts.push(t);
+        }
+
+
+        const rawMarkdown = parts.join("\n").replace(/\u00A0/g, " "); // Replace non-breaking space to avoid odd wrapping
+        const finalMarkdown = rawMarkdown.trimEnd(); // Remove trailing blank lines if any
+
+        // 4) Clear the section after <summary>, leaving it untouched when necessary
+        //    Practically it means removing all non-summary nodes
+        for (const n of Array.from(detailsEl.childNodes)) {
+          if (n !== summaryEl) detailsEl.removeChild(n);
+        }
+
+        // 5) Insert a new container for a single pass Markdown render
+        const container = detailsEl.ownerDocument!.createElement("div");
+        container.classList.add("dmr-content");
+        detailsEl.appendChild(container);
+
+        if (finalMarkdown.length > 0) {
+          MarkdownRenderer.renderMarkdown(finalMarkdown, container, ctx.sourcePath, this);
+        }
+      });
+    });
+  }
+
+  onunload() {}
+
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+/** Settings tab */
+class DMRSettingTab extends PluginSettingTab {
+  plugin: DetailsMarkdownRendererPlugin;
 
-	async onload() {
-		await this.loadSettings();
+  constructor(app: App, plugin: DetailsMarkdownRendererPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h2", { text: "folded-markdown-renderer" });
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+    new Setting(containerEl)
+      .setName("Render Markdown")
+      .setDesc("Render Markdown inside <details> blocks. Disable to leave default behavior.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.enabled).onChange(async (v) => {
+          this.plugin.settings.enabled = v;
+          await this.plugin.saveSettings();
+        }),
+      );
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, _view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
-
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    new Setting(containerEl)
+      .setName("Render <summary>")
+      .setDesc("Include <summary> text when rendering Markdown (off by default).")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.renderSummary).onChange(async (v) => {
+          this.plugin.settings.renderSummary = v;
+          await this.plugin.saveSettings();
+        }),
+      );
+  }
 }
