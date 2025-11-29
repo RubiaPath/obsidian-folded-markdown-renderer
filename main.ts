@@ -104,7 +104,7 @@ class DMRSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "folded-markdown-renderer" });
+    containerEl.createEl("h2", { text: "Obsidian Folded Markdown Renderer" });
 
     new Setting(containerEl)
       .setName("Render Markdown")

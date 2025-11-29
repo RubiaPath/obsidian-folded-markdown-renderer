@@ -1,5 +1,5 @@
 {
-	"name": "folded-markdown-renderer",
+	"name": "obsidian-folded-markdown-renderer",
 	"version": "1.0.0",
 	"description": "Render Markdown content inside <details> blocks for Obsidian.",
 	"main": "main.js",

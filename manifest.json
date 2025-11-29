@@ -1,6 +1,6 @@
 {
-  "id": "folded-markdown-renderer",
-  "name": "folded-markdown-renderer",
+  "id": "obsidian-folded-markdown-renderer",
+  "name": "Obsidian Folded Markdown Renderer",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
   "description": "Render markdown inside <details> blocks in Obsidian.",
